@@ -88,46 +88,6 @@ let signature = DisplaySignature.make(from: [
 ])
 check(signature == ["7:0,0,1728,1117"], "Display signature captures ID and frame")
 
-let mediaUpDown = BrightnessKeyEventParser.parseSystemDefined(data1: (2 << 16) | 0xA00)
-check(
-  mediaUpDown == BrightnessKeyEvent(key: .up, isPressed: true, isRepeat: false),
-  "System-defined brightness-up press is parsed"
-)
-let mediaDownRepeat = BrightnessKeyEventParser.parseSystemDefined(data1: (3 << 16) | 0xA01)
-check(
-  mediaDownRepeat == BrightnessKeyEvent(key: .down, isPressed: true, isRepeat: true),
-  "System-defined brightness-down repeat is parsed"
-)
-check(
-  BrightnessKeyEventParser.parseSystemDefined(data1: (10 << 16) | 0xA00) == nil,
-  "Unrelated media keys are ignored"
-)
-check(
-  BrightnessKeyEventParser.parseFunctionKey(
-    keyCode: 144,
-    isPressed: true,
-    isRepeat: false
-  )?.key == .up,
-  "Function-key brightness-up is parsed"
-)
-
-check(
-  ExtendedBrightnessScale.boost(progress: 0.5, maximumBoost: 2.0) == 1.5,
-  "Extended scale interpolates the requested boost"
-)
-check(
-  ExtendedBrightnessScale.step(progress: 0.0, direction: .up) == 0.0625,
-  "Extended scale uses native-feeling sixteenth steps"
-)
-check(
-  ExtendedBrightnessScale.step(progress: 0.0, direction: .down) == 0.0,
-  "Extended scale clamps at its lower bound"
-)
-check(
-  ExtendedBrightnessScale.step(progress: 1.0, direction: .up) == 1.0,
-  "Extended scale clamps at its upper bound"
-)
-
 if failureCount > 0 {
   print("\n\(failureCount) test(s) failed.")
   exit(1)

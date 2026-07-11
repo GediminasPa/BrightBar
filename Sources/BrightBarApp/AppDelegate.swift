@@ -1,25 +1,13 @@
 import AppKit
 import BrightBarCore
-import CoreGraphics
 
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   private let controller = OverlayController()
-  private let keyTap = BrightnessKeyTap()
   private let menu = NSMenu()
-
   private var statusItem: NSStatusItem!
   private var toggleItem: NSMenuItem!
-  private var rangeItem: NSMenuItem!
-  private var keyboardStatusItem: NSMenuItem!
   private var slider: NSSlider!
-
   private var level: BrightnessLevel = .brighter
-  private var isFeatureEnabled = false
-  private var extraProgress: CGFloat = 0.0
-  private var normalRangeAtMaximum = true
-  private var consumedKeyDowns: Set<BrightnessKey> = []
-  private var permissionTimer: Timer?
-  private var boundaryProbeCancellation = 0
 
   private let levelDefaultsKey = "BrightBar.level"
   private static let repositoryURL = "https://github.com/GediminasPa/BrightBar"
@@ -31,20 +19,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       )
     }
 
-    keyTap.onEvent = { [weak self] event in
-      self?.handleBrightnessKey(event) ?? false
-    }
-
     setupMenuBarItem()
     buildMenu()
     controller.primeDisplaySignature()
+    applySelectedLevel()
     registerObservers()
     updateInterface()
-  }
-
-  func applicationWillTerminate(_ notification: Notification) {
-    permissionTimer?.invalidate()
-    keyTap.stop()
   }
 
   private func setupMenuBarItem() {
@@ -69,22 +49,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     toggleItem.target = self
     menu.addItem(toggleItem)
 
-    rangeItem = NSMenuItem(title: "XDR range: Off", action: nil, keyEquivalent: "")
-    rangeItem.isEnabled = false
-    menu.addItem(rangeItem)
-
     menu.addItem(.separator())
     menu.addItem(makeLevelControl())
     menu.addItem(.separator())
 
-    keyboardStatusItem = NSMenuItem(
-      title: "F1/F2 control activates with BrightBar",
-      action: #selector(openAccessibilitySettings),
+    let keyboardNote = NSMenuItem(
+      title: "F1/F2 remain controlled by macOS",
+      action: nil,
       keyEquivalent: ""
     )
-    keyboardStatusItem.target = self
-    keyboardStatusItem.isEnabled = false
-    menu.addItem(keyboardStatusItem)
+    keyboardNote.isEnabled = false
+    menu.addItem(keyboardNote)
 
     let projectItem = NSMenuItem(
       title: "View BrightBar on GitHub",
@@ -106,7 +81,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   private func makeLevelControl() -> NSMenuItem {
     let container = NSView(frame: NSRect(x: 0, y: 0, width: 300, height: 76))
 
-    let title = NSTextField(labelWithString: "Maximum XDR boost")
+    let title = NSTextField(labelWithString: "XDR boost")
     title.frame = NSRect(x: 16, y: 52, width: 268, height: 16)
     title.font = .systemFont(ofSize: 11, weight: .medium)
     title.textColor = .secondaryLabelColor
@@ -146,15 +121,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   }
 
   func menuWillOpen(_ menu: NSMenu) {
-    if isFeatureEnabled, !keyTap.isRunning {
-      _ = keyTap.start(promptForPermission: false)
-    }
+    applySelectedLevel()
     updateInterface()
   }
 
   @objc private func toggleBoost() {
-    if isFeatureEnabled {
-      disableFeature()
+    if controller.isEnabled {
+      controller.setEnabled(false)
+      updateInterface()
       return
     }
 
@@ -163,162 +137,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       return
     }
 
-    isFeatureEnabled = true
-    normalRangeAtMaximum = true
-    setExtraProgress(1.0)
-
-    if !keyTap.start(promptForPermission: true) {
-      startPermissionMonitoring()
-    }
-    updateInterface()
-  }
-
-  private func disableFeature() {
-    isFeatureEnabled = false
-    boundaryProbeCancellation += 1
-    consumedKeyDowns.removeAll()
-    permissionTimer?.invalidate()
-    permissionTimer = nil
-    keyTap.stop()
-    setExtraProgress(0.0)
+    applySelectedLevel()
+    controller.setEnabled(true)
     updateInterface()
   }
 
   @objc private func levelChanged() {
     level = BrightnessLevel.restoring(Int(slider.doubleValue.rounded()))
     UserDefaults.standard.set(level.rawValue, forKey: levelDefaultsKey)
-    if isFeatureEnabled {
-      setExtraProgress(extraProgress)
-    }
+    applySelectedLevel()
   }
 
-  private func handleBrightnessKey(_ event: BrightnessKeyEvent) -> Bool {
-    guard isFeatureEnabled else { return false }
-
-    if !event.isPressed {
-      return consumedKeyDowns.remove(event.key) != nil
-    }
-
-    let shouldConsume: Bool
-    switch event.key {
-    case .down:
-      boundaryProbeCancellation += 1
-      if extraProgress > 0.000_1 {
-        setExtraProgress(
-          ExtendedBrightnessScale.step(progress: extraProgress, direction: .down)
-        )
-        shouldConsume = true
-      } else {
-        normalRangeAtMaximum = false
-        shouldConsume = false
-      }
-
-    case .up:
-      if extraProgress > 0.000_1 || normalRangeAtMaximum {
-        setExtraProgress(
-          ExtendedBrightnessScale.step(progress: extraProgress, direction: .up)
-        )
-        shouldConsume = true
-      } else {
-        probeForNormalMaximum(afterPassingUpKeyFrom: currentLiveHeadroom())
-        shouldConsume = false
-      }
-    }
-
-    if shouldConsume {
-      consumedKeyDowns.insert(event.key)
-    }
-    return shouldConsume
-  }
-
-  private func probeForNormalMaximum(afterPassingUpKeyFrom headroomBefore: CGFloat) {
-    let cancellation = boundaryProbeCancellation
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) { [weak self] in
-      guard let self,
-        self.isFeatureEnabled,
-        self.extraProgress < 0.000_1,
-        cancellation == self.boundaryProbeCancellation
-      else { return }
-
-      let headroomAfter = self.currentLiveHeadroom()
-      if abs(headroomAfter - headroomBefore) < 0.002 {
-        self.normalRangeAtMaximum = true
-        self.setExtraProgress(
-          ExtendedBrightnessScale.step(progress: 0.0, direction: .up)
-        )
-      }
-    }
-  }
-
-  private func currentLiveHeadroom() -> CGFloat {
-    let builtIn = NSScreen.screens.first { screen in
-      let key = NSDeviceDescriptionKey("NSScreenNumber")
-      guard let number = screen.deviceDescription[key] as? NSNumber else { return false }
-      return CGDisplayIsBuiltin(CGDirectDisplayID(number.uint32Value)) != 0
-    }
-    return builtIn?.maximumExtendedDynamicRangeColorComponentValue ?? 1.0
-  }
-
-  private func setExtraProgress(_ progress: CGFloat) {
-    extraProgress = min(max(progress, 0.0), 1.0)
-    let maximumBoost = level.boost(
+  private func applySelectedLevel() {
+    controller.boost = level.boost(
       potentialHeadroom: controller.maximumPotentialHeadroom
     )
-    controller.boost = ExtendedBrightnessScale.boost(
-      progress: extraProgress,
-      maximumBoost: maximumBoost
-    )
-
-    if extraProgress > 0.000_1 {
-      if !controller.isEnabled {
-        controller.setEnabled(true)
-      }
-    } else if controller.isEnabled {
-      controller.setEnabled(false)
-    }
-
-    updateInterface()
-  }
-
-  private func startPermissionMonitoring() {
-    permissionTimer?.invalidate()
-    let timer = Timer(timeInterval: 1.0, repeats: true) { [weak self] timer in
-      guard let self, self.isFeatureEnabled else {
-        timer.invalidate()
-        return
-      }
-      if self.keyTap.start(promptForPermission: false) {
-        timer.invalidate()
-        self.permissionTimer = nil
-        self.updateInterface()
-      }
-    }
-    RunLoop.main.add(timer, forMode: .common)
-    permissionTimer = timer
   }
 
   private func updateInterface() {
-    guard toggleItem != nil else { return }
-
-    toggleItem.state = isFeatureEnabled ? .on : .off
-    toggleItem.title = isFeatureEnabled ? "BrightBar is on" : "Enable BrightBar"
-    rangeItem.title =
-      isFeatureEnabled
-      ? "XDR range: \(Int((extraProgress * 100).rounded()))%"
-      : "XDR range: Off"
-
-    if !isFeatureEnabled {
-      keyboardStatusItem.title = "F1/F2 control activates with BrightBar"
-      keyboardStatusItem.isEnabled = false
-    } else if keyTap.isRunning {
-      keyboardStatusItem.title = "F1/F2 extended range is active"
-      keyboardStatusItem.isEnabled = false
-    } else {
-      keyboardStatusItem.title = "Grant Accessibility for F1/F2…"
-      keyboardStatusItem.isEnabled = true
-    }
-
-    statusItem.button?.image = statusIcon(enabled: isFeatureEnabled)
+    let enabled = controller.isEnabled
+    toggleItem.state = enabled ? .on : .off
+    toggleItem.title = enabled ? "BrightBar is on" : "Enable BrightBar"
+    statusItem.button?.image = statusIcon(enabled: enabled)
     statusItem.button?.image?.isTemplate = true
     slider?.doubleValue = Double(level.rawValue)
   }
@@ -355,21 +195,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   }
 
   @objc private func screenParametersChanged() {
-    if isFeatureEnabled, extraProgress > 0.000_1 {
-      setExtraProgress(extraProgress)
-    }
+    applySelectedLevel()
     controller.handleScreenChange()
     updateInterface()
   }
 
   @objc private func reapplyAfterWake() {
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
-      guard let self else { return }
-      self.controller.reapplyAfterWake()
-      if self.isFeatureEnabled, !self.keyTap.isRunning {
-        _ = self.keyTap.start(promptForPermission: false)
-      }
-      self.updateInterface()
+      self?.controller.reapplyAfterWake()
     }
   }
 
@@ -383,22 +216,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     alert.runModal()
   }
 
-  @objc private func openAccessibilitySettings() {
-    guard
-      let url = URL(
-        string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
-      )
-    else { return }
-    NSWorkspace.shared.open(url)
-  }
-
   @objc private func openRepository() {
     guard let url = URL(string: Self.repositoryURL) else { return }
     NSWorkspace.shared.open(url)
   }
 
   @objc private func quit() {
-    disableFeature()
+    controller.setEnabled(false)
     NSApp.terminate(nil)
   }
 }
