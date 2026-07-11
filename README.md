@@ -9,6 +9,7 @@ It gives you three boost levels—Gentle, Brighter, and Maximum—without changi
 - macOS 13 Ventura or newer
 - A 14-inch or 16-inch Apple-silicon MacBook Pro with a Liquid Retina XDR display, or another EDR-capable display
 - Apple Command Line Tools (`xcode-select --install`)
+- Accessibility permission for seamless F1/F2 control
 
 The 2019 Intel 16-inch MacBook Pro does not have a Liquid Retina XDR display and cannot gain extra brightness this way.
 
@@ -27,7 +28,13 @@ To install it in Applications:
 ./scripts/install.sh
 ```
 
-Once running, click the sun icon in the macOS menu bar, choose a boost level, and select **Enable extra brightness**. For the strongest outdoor result, first set the normal macOS brightness to maximum.
+Once running, click the sun icon in the macOS menu bar, choose a maximum boost, and select **Enable BrightBar**. BrightBar engages immediately at the selected maximum. macOS will ask for Accessibility permission so the app can integrate with the brightness keys.
+
+With BrightBar enabled, F1 and F2 behave as one continuous brightness scale:
+
+- F2 increases normal macOS brightness, then continues into the XDR range.
+- F1 reduces the XDR range first, then resumes normal macOS dimming.
+- Holding a key repeats in small steps, just like the native control.
 
 BrightBar always starts with the boost switched off.
 
@@ -45,7 +52,7 @@ swift run BrightBarTests
 
 ## Acknowledgements
 
-The EDR overlay technique and safety-oriented pacing logic were adapted from [MaxNit](https://github.com/Solexec/MaxNit), released under the MIT License. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+The EDR overlay technique and safety-oriented pacing logic were adapted from [MaxNit](https://github.com/Solexec/MaxNit). Brightness-key event handling was adapted from [MediaKeyTap](https://github.com/MonitorControl/MediaKeyTap). Both are released under the MIT License. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ## License
 
