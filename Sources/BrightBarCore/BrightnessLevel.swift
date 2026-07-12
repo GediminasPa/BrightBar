@@ -20,7 +20,7 @@ public enum BrightnessLevel: Int, CaseIterable {
     case .brighter:
       return GammaMath.safeFactor(1.4)
     case .maximum:
-      return GammaMath.safeFactor(2.0)
+      return GammaMath.safeFactor(8.0)
     }
   }
 

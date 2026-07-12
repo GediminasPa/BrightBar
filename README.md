@@ -2,7 +2,7 @@
 
 BrightBar is a small, free, open-source macOS menu-bar app that unlocks the Extended Dynamic Range (EDR) brightness headroom of compatible Liquid Retina XDR displays.
 
-It gives you three boost levels—Gentle, Brighter, and Maximum—with Maximum applying a 2× extended transfer factor. BrightBar uses Apple's public EDR/Metal rendering path, while macOS remains responsible for thermal and power limits.
+It gives you three boost levels—Gentle, Brighter, and Maximum—with Maximum requesting an 8× extended transfer factor. BrightBar uses Apple's public EDR/Metal rendering path, while macOS remains responsible for thermal and power limits. At this experimental setting, the panel will clamp output and bright colors may clip.
 
 ## Requirements
 
