@@ -16,11 +16,11 @@ public enum BrightnessLevel: Int, CaseIterable {
   public func boost(potentialHeadroom: CGFloat) -> CGFloat {
     switch self {
     case .gentle:
-      return BoostMath.clampedBoost(1.3, ceiling: potentialHeadroom)
+      return GammaMath.safeFactor(1.2)
     case .brighter:
-      return BoostMath.clampedBoost(1.8, ceiling: potentialHeadroom)
+      return GammaMath.safeFactor(1.4)
     case .maximum:
-      return BoostMath.clampedBoost(.greatestFiniteMagnitude, ceiling: potentialHeadroom)
+      return GammaMath.safeFactor(1.6)
     }
   }
 

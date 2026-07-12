@@ -33,9 +33,9 @@ BrightBar always starts with the boost switched off.
 
 ## How it works
 
-BrightBar renders an invisible, click-through Metal layer in an extended-linear color space. The layer asks macOS for EDR headroom and multiply-blends the desktop uniformly. Brightness changes are eased and paced against the live headroom reported by macOS to reduce flashing and washed-out colors.
+BrightBar renders a one-pixel Metal trigger in an extended-linear color space to engage macOS's EDR headroom, then applies an extended display transfer curve to lift the whole desktop. Changes are eased to avoid a hard flash, and the original transfer table is restored whenever BrightBar is disabled or quits.
 
-The app does not call private brightness APIs, alter display firmware, or disable thermal protections. Extra brightness still increases power use and heat, so it is best treated as an outdoor or short-term mode.
+The app does not call private brightness APIs, alter display firmware, or disable thermal protections. Extra brightness still increases power use and heat, so it is best treated as an outdoor or short-term mode. Apps that also modify display gamma or color temperature may conflict with BrightBar while it is enabled.
 
 ## Tests
 
@@ -45,7 +45,7 @@ swift run BrightBarTests
 
 ## Acknowledgements
 
-The EDR overlay technique and safety-oriented pacing logic were adapted from [MaxNit](https://github.com/Solexec/MaxNit), released under the MIT License. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+The original EDR overlay technique was adapted from [MaxNit](https://github.com/Solexec/MaxNit), released under the MIT License. The stronger gamma/EDR architecture was informed by the open-source [BrightIntosh](https://github.com/niklasr22/BrightIntosh) project. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ## License
 

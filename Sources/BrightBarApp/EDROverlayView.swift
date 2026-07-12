@@ -4,7 +4,7 @@ import MetalKit
 import QuartzCore
 
 final class EDROverlayView: MTKView, MTKViewDelegate {
-  var boost: CGFloat = 1.0 {
+  var boost: CGFloat = 1.6 {
     didSet {
       clearColor = MTLClearColor(
         red: Double(boost),
@@ -12,6 +12,7 @@ final class EDROverlayView: MTKView, MTKViewDelegate {
         blue: Double(boost),
         alpha: 1.0
       )
+      draw()
     }
   }
 
@@ -31,19 +32,30 @@ final class EDROverlayView: MTKView, MTKViewDelegate {
     self.commandQueue = commandQueue
     super.init(frame: frame, device: device)
 
+    autoResizeDrawable = false
+    drawableSize = CGSize(width: 1, height: 1)
     colorPixelFormat = .rgba16Float
-    colorspace = CGColorSpace(name: CGColorSpace.extendedLinearDisplayP3)
+    colorspace = CGColorSpace(name: CGColorSpace.extendedLinearSRGB)
     framebufferOnly = true
     wantsLayer = true
-    layer?.isOpaque = false
-    layer?.compositingFilter = "multiply"
-    (layer as? CAMetalLayer)?.wantsExtendedDynamicRangeContent = true
 
-    preferredFramesPerSecond = 20
+    if let metalLayer = layer as? CAMetalLayer {
+      metalLayer.wantsExtendedDynamicRangeContent = true
+      metalLayer.isOpaque = false
+      metalLayer.backgroundColor = CGColor(
+        red: 1.0,
+        green: 1.0,
+        blue: 1.0,
+        alpha: 1.0
+      )
+      metalLayer.pixelFormat = .rgba16Float
+    }
+
+    preferredFramesPerSecond = 5
     enableSetNeedsDisplay = false
     isPaused = false
     delegate = self
-    boost = 1.0
+    boost = 1.6
   }
 
   required init(coder: NSCoder) {

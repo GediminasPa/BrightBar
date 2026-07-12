@@ -1,12 +1,13 @@
 import AppKit
 import BrightBarCore
+import CoreGraphics
 
 final class OverlayController {
   private(set) var isEnabled = false
-  var boost: CGFloat = 1.8 {
+
+  var boost: CGFloat = 1.4 {
     didSet {
-      guard !isDisabling else { return }
-      targetBoost = boost
+      targetFactor = GammaMath.safeFactor(boost)
       if isEnabled { startAnimation() }
     }
   }
@@ -23,19 +24,17 @@ final class OverlayController {
     )
   }
 
-  private var windows: [OverlayWindow] = []
-  private var appliedBoost: CGFloat = 1.0
-  private var targetBoost: CGFloat = 1.0
+  private var windows: [CGDirectDisplayID: OverlayWindow] = [:]
+  private var gammaTables: [CGDirectDisplayID: GammaTable] = [:]
+  private var appliedFactor: CGFloat = 1.0
+  private var targetFactor: CGFloat = 1.0
   private var animationTimer: Timer?
   private var isDisabling = false
-  private var engagementFrames = 0
   private var displaySignature: [String] = []
 
   private let animationFPS = 60
-  private let idleFPS = 20
   private let smoothing: CGFloat = 0.18
-  private let snapThreshold: CGFloat = 0.005
-  private let maximumEngagementFrames = 90
+  private let snapThreshold: CGFloat = 0.002
 
   func primeDisplaySignature() {
     displaySignature = currentDisplaySignature()
@@ -47,18 +46,14 @@ final class OverlayController {
 
     if enabled {
       isDisabling = false
-      buildWindowsIfNeeded()
-      appliedBoost = 1.0
-      applyBoost()
-      for window in windows {
-        window.overlay.draw()
-        window.orderFrontRegardless()
-      }
-      targetBoost = boost
+      buildResources()
+      appliedFactor = 1.0
+      targetFactor = GammaMath.safeFactor(boost)
+      showTriggers()
       startAnimation()
     } else {
       isDisabling = true
-      targetBoost = 1.0
+      targetFactor = 1.0
       startAnimation()
     }
   }
@@ -68,68 +63,88 @@ final class OverlayController {
     let layoutChanged = nextSignature != displaySignature
     displaySignature = nextSignature
 
-    guard isEnabled, layoutChanged else { return }
-    rebuildWindows()
+    guard isEnabled else { return }
+    if layoutChanged {
+      rebuildResources()
+    } else {
+      applyGammaFactor(appliedFactor)
+    }
   }
 
   func reapplyAfterWake() {
     guard isEnabled else { return }
-    appliedBoost = 1.0
-    targetBoost = boost
-    for window in windows {
-      window.orderFrontRegardless()
-      window.overlay.draw()
-    }
+    showTriggers()
+    appliedFactor = 1.0
+    targetFactor = GammaMath.safeFactor(boost)
     startAnimation()
+  }
+
+  func resetImmediately() {
+    stopAnimation()
+    restoreDisplays()
+    closeWindows()
+    isEnabled = false
+    isDisabling = false
+    appliedFactor = 1.0
+    targetFactor = 1.0
+  }
+
+  private func buildResources() {
+    guard windows.isEmpty, gammaTables.isEmpty else { return }
+    CGDisplayRestoreColorSyncSettings()
+
+    for screen in NSScreen.screens
+    where BoostMath.isEDRCapable(
+      screen.maximumPotentialExtendedDynamicRangeColorComponentValue
+    ) {
+      guard let displayID = displayID(for: screen),
+        let gammaTable = GammaTable.capture(displayID: displayID),
+        let window = OverlayWindow(screen: screen)
+      else {
+        continue
+      }
+
+      gammaTables[displayID] = gammaTable
+      windows[displayID] = window
+    }
+  }
+
+  private func rebuildResources() {
+    stopAnimation()
+    restoreDisplays()
+    closeWindows()
+    buildResources()
+    appliedFactor = 1.0
+    targetFactor = GammaMath.safeFactor(boost)
+    showTriggers()
+    startAnimation()
+  }
+
+  private func showTriggers() {
+    for window in windows.values {
+      window.overlay.boost = 1.6
+      window.overlay.draw()
+      window.orderFrontRegardless()
+    }
   }
 
   private func currentDisplaySignature() -> [String] {
     let displays = NSScreen.screens.map { screen -> DisplaySignature.DisplayInfo in
-      let key = NSDeviceDescriptionKey("NSScreenNumber")
-      let id = (screen.deviceDescription[key] as? NSNumber)?.intValue ?? 0
-      return DisplaySignature.DisplayInfo(id: id, frame: screen.frame)
+      DisplaySignature.DisplayInfo(
+        id: Int(displayID(for: screen) ?? 0),
+        frame: screen.frame
+      )
     }
     return DisplaySignature.make(from: displays)
   }
 
-  private func buildWindowsIfNeeded() {
-    guard windows.isEmpty else { return }
-    windows = NSScreen.screens.compactMap { screen in
-      guard
-        BoostMath.isEDRCapable(
-          screen.maximumPotentialExtendedDynamicRangeColorComponentValue
-        )
-      else {
-        return nil
-      }
-      return OverlayWindow(screen: screen)
-    }
-  }
-
-  private func rebuildWindows() {
-    stopAnimation()
-    for window in windows {
-      window.orderOut(nil)
-    }
-    windows.removeAll()
-    buildWindowsIfNeeded()
-    appliedBoost = 1.0
-    targetBoost = boost
-    applyBoost()
-    for window in windows {
-      window.overlay.draw()
-      window.orderFrontRegardless()
-    }
-    startAnimation()
+  private func displayID(for screen: NSScreen) -> CGDirectDisplayID? {
+    let key = NSDeviceDescriptionKey("NSScreenNumber")
+    return (screen.deviceDescription[key] as? NSNumber)?.uint32Value
   }
 
   private func startAnimation() {
-    for window in windows {
-      window.overlay.preferredFramesPerSecond = animationFPS
-    }
-    engagementFrames = 0
     guard animationTimer == nil else { return }
-
     let timer = Timer(
       timeInterval: 1.0 / Double(animationFPS),
       repeats: true
@@ -142,51 +157,47 @@ final class OverlayController {
 
   private func animationStep() {
     let next = BoostMath.easeStep(
-      applied: appliedBoost,
-      target: targetBoost,
+      applied: appliedFactor,
+      target: targetFactor,
       smoothing: smoothing,
       snapThreshold: snapThreshold
     )
-    appliedBoost = next.value
-    let isStillEngaging = applyBoost()
-    engagementFrames += 1
+    appliedFactor = next.value
+    applyGammaFactor(appliedFactor)
 
-    if next.settled && (!isStillEngaging || engagementFrames >= maximumEngagementFrames) {
+    if next.settled {
       finishAnimation()
     }
   }
 
-  @discardableResult
-  private func applyBoost() -> Bool {
-    var isStillEngaging = false
-
-    for window in windows {
-      guard let screen = window.screen else { continue }
-      let liveHeadroom = screen.maximumExtendedDynamicRangeColorComponentValue
-      let paced = BoostMath.pacedBoost(appliedBoost, liveHeadroom: liveHeadroom)
-      window.overlay.boost = paced
-      if paced + 0.001 < appliedBoost {
-        isStillEngaging = true
-      }
-    }
-
-    return isStillEngaging
-  }
-
   private func finishAnimation() {
     stopAnimation()
+    guard isDisabling else { return }
 
-    if isDisabling {
-      isDisabling = false
-      for window in windows {
-        window.orderOut(nil)
-      }
-      windows.removeAll()
-    } else {
-      for window in windows {
-        window.overlay.preferredFramesPerSecond = idleFPS
-      }
+    isDisabling = false
+    restoreDisplays()
+    closeWindows()
+  }
+
+  private func applyGammaFactor(_ factor: CGFloat) {
+    for (displayID, table) in gammaTables {
+      table.apply(displayID: displayID, factor: factor)
     }
+  }
+
+  private func restoreDisplays() {
+    for (displayID, table) in gammaTables {
+      table.apply(displayID: displayID, factor: 1.0)
+    }
+    gammaTables.removeAll()
+    CGDisplayRestoreColorSyncSettings()
+  }
+
+  private func closeWindows() {
+    for window in windows.values {
+      window.orderOut(nil)
+    }
+    windows.removeAll()
   }
 
   private func stopAnimation() {

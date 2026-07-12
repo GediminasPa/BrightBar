@@ -27,6 +27,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     updateInterface()
   }
 
+  func applicationWillTerminate(_ notification: Notification) {
+    controller.resetImmediately()
+  }
+
   private func setupMenuBarItem() {
     statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     statusItem.menu = menu
@@ -222,7 +226,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   }
 
   @objc private func quit() {
-    controller.setEnabled(false)
+    controller.resetImmediately()
     NSApp.terminate(nil)
   }
 }
