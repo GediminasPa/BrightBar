@@ -2,7 +2,7 @@
 
 BrightBar is a small, free, open-source macOS menu-bar app that unlocks the Extended Dynamic Range (EDR) brightness headroom of compatible Liquid Retina XDR displays.
 
-It gives you three boost levels—Gentle, Brighter, and Maximum—with Maximum requesting an 8× extended transfer factor. BrightBar uses Apple's public EDR/Metal rendering path, while macOS remains responsible for thermal and power limits. At this experimental setting, the panel will clamp output and bright colors may clip.
+It gives you four EDR request levels—1×, 1.5×, 2×, and 4×—without modifying the display gamma table. BrightBar uses Apple's public EDR/Metal rendering path, while macOS remains responsible for thermal and power limits.
 
 ## Requirements
 
@@ -33,9 +33,9 @@ BrightBar always starts with the boost switched off.
 
 ## How it works
 
-BrightBar renders a one-pixel Metal trigger in an extended-linear color space to engage macOS's EDR headroom, then applies an extended display transfer curve to lift the whole desktop. Changes are eased to avoid a hard flash, and the original transfer table is restored whenever BrightBar is disabled or quits.
+BrightBar renders an invisible, click-through Metal layer in an extended-linear P3 color space and multiply-composites each color channel equally. Requests are smoothly eased and clamped to the live EDR headroom reported by macOS, preserving color ratios and tonal separation instead of flattening the image through gamma manipulation.
 
-The app does not call private brightness APIs, alter display firmware, or disable thermal protections. Extra brightness still increases power use and heat, so it is best treated as an outdoor or short-term mode. Apps that also modify display gamma or color temperature may conflict with BrightBar while it is enabled.
+The app does not call private brightness APIs, alter display gamma, change display firmware, or disable thermal protections. Extra brightness still increases power use and heat, so it is best treated as an outdoor or short-term mode. The 4× stop is a request: macOS clamps it to the headroom the display can provide at the current hardware brightness.
 
 ## Tests
 
@@ -45,7 +45,7 @@ swift run BrightBarTests
 
 ## Acknowledgements
 
-The original EDR overlay technique was adapted from [MaxNit](https://github.com/Solexec/MaxNit), released under the MIT License. The stronger gamma/EDR architecture was informed by the open-source [BrightIntosh](https://github.com/niklasr22/BrightIntosh) project. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+The EDR overlay technique was adapted from [MaxNit](https://github.com/Solexec/MaxNit), released under the MIT License. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ## License
 

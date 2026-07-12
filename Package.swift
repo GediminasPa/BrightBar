@@ -16,7 +16,8 @@ let package = Package(
     .executableTarget(
       name: "BrightBarApp",
       dependencies: ["BrightBarCore"],
-      path: "Sources/BrightBarApp"
+      path: "Sources/BrightBarApp",
+      resources: [.process("Resources")]
     ),
     .executableTarget(
       name: "BrightBarTests",

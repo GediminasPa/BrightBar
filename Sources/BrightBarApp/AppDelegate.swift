@@ -1,5 +1,6 @@
 import AppKit
 import BrightBarCore
+import CoreGraphics
 
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   private let controller = OverlayController()
@@ -7,16 +8,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   private var statusItem: NSStatusItem!
   private var toggleItem: NSMenuItem!
   private var slider: NSSlider!
-  private var level: BrightnessLevel = .brighter
+  private var level: BrightnessLevel = .four
 
-  private let levelDefaultsKey = "BrightBar.level"
+  private let levelDefaultsKey = "BrightBar.level.v2"
+  private let legacyLevelDefaultsKey = "BrightBar.level"
   private static let repositoryURL = "https://github.com/GediminasPa/BrightBar"
 
   func applicationDidFinishLaunching(_ notification: Notification) {
+    // Undo color-table changes left behind by BrightBar 0.3.x or another
+    // interrupted gamma-based run. The EDR backend never modifies ColorSync.
+    CGDisplayRestoreColorSyncSettings()
+
     if UserDefaults.standard.object(forKey: levelDefaultsKey) != nil {
       level = BrightnessLevel.restoring(
         UserDefaults.standard.integer(forKey: levelDefaultsKey)
       )
+    } else if UserDefaults.standard.object(forKey: legacyLevelDefaultsKey) != nil {
+      level = migratedLegacyLevel(
+        UserDefaults.standard.integer(forKey: legacyLevelDefaultsKey)
+      )
+      UserDefaults.standard.set(level.rawValue, forKey: levelDefaultsKey)
     }
 
     setupMenuBarItem()
@@ -85,7 +96,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   private func makeLevelControl() -> NSMenuItem {
     let container = NSView(frame: NSRect(x: 0, y: 0, width: 300, height: 76))
 
-    let title = NSTextField(labelWithString: "XDR boost")
+    let title = NSTextField(labelWithString: "EDR brightness request")
     title.frame = NSRect(x: 16, y: 52, width: 268, height: 16)
     title.font = .systemFont(ofSize: 11, weight: .medium)
     title.textColor = .secondaryLabelColor
@@ -94,28 +105,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     slider = NSSlider(
       value: Double(level.rawValue),
       minValue: 0,
-      maxValue: 2,
+      maxValue: Double(BrightnessLevel.allCases.count - 1),
       target: self,
       action: #selector(levelChanged)
     )
     slider.frame = NSRect(x: 14, y: 27, width: 272, height: 20)
-    slider.numberOfTickMarks = 3
+    slider.numberOfTickMarks = BrightnessLevel.allCases.count
     slider.allowsTickMarkValuesOnly = true
     slider.isContinuous = true
     container.addSubview(slider)
 
-    let labels: [(String, NSRect, NSTextAlignment)] = [
-      ("Gentle", NSRect(x: 12, y: 5, width: 88, height: 16), .left),
-      ("Brighter", NSRect(x: 106, y: 5, width: 88, height: 16), .center),
-      ("Maximum", NSRect(x: 200, y: 5, width: 88, height: 16), .right),
-    ]
-
-    for (text, frame, alignment) in labels {
-      let label = NSTextField(labelWithString: text)
-      label.frame = frame
+    let labelWidth: CGFloat = 52
+    let labelSpacing = (268 - labelWidth)
+      / CGFloat(max(1, BrightnessLevel.allCases.count - 1))
+    for (index, brightnessLevel) in BrightnessLevel.allCases.enumerated() {
+      let label = NSTextField(labelWithString: brightnessLevel.title)
+      label.frame = NSRect(
+        x: 16 + CGFloat(index) * labelSpacing,
+        y: 5,
+        width: labelWidth,
+        height: 16
+      )
       label.font = .systemFont(ofSize: 10)
       label.textColor = .secondaryLabelColor
-      label.alignment = alignment
+      label.alignment = .center
       container.addSubview(label)
     }
 
@@ -152,6 +165,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     applySelectedLevel()
   }
 
+  private func migratedLegacyLevel(_ rawValue: Int) -> BrightnessLevel {
+    switch rawValue {
+    case 0: return .onePointFive
+    case 1: return .two
+    case 2: return .four
+    default: return .two
+    }
+  }
+
   private func applySelectedLevel() {
     controller.boost = level.boost(
       potentialHeadroom: controller.maximumPotentialHeadroom
@@ -168,10 +190,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   }
 
   private func statusIcon(enabled: Bool) -> NSImage? {
-    NSImage(
-      systemSymbolName: enabled ? "sun.max.fill" : "sun.max",
-      accessibilityDescription: enabled ? "BrightBar enabled" : "BrightBar disabled"
+    guard
+      let url = Bundle.module.url(forResource: "StatusIcon", withExtension: "png"),
+      let source = NSImage(contentsOf: url),
+      let image = source.copy() as? NSImage
+    else {
+      return NSImage(
+        systemSymbolName: enabled ? "sun.max.fill" : "sun.max",
+        accessibilityDescription: enabled ? "BrightBar enabled" : "BrightBar disabled"
+      )
+    }
+
+    let sourceSize = image.size
+    let scale = 18 / max(sourceSize.width, sourceSize.height)
+    image.size = NSSize(
+      width: sourceSize.width * scale,
+      height: sourceSize.height * scale
     )
+    image.isTemplate = true
+    image.accessibilityDescription = enabled ? "BrightBar enabled" : "BrightBar disabled"
+    return image
   }
 
   private func registerObservers() {

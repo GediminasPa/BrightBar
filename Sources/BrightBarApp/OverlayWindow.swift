@@ -4,15 +4,9 @@ final class OverlayWindow: NSWindow {
   let overlay: EDROverlayView
 
   init?(screen: NSScreen) {
-    let triggerFrame = NSRect(
-      x: screen.frame.minX,
-      y: screen.frame.minY,
-      width: 1,
-      height: 1
-    )
     guard
       let overlay = EDROverlayView.make(
-        frame: NSRect(origin: .zero, size: triggerFrame.size)
+        frame: NSRect(origin: .zero, size: screen.frame.size)
       )
     else {
       return nil
@@ -20,13 +14,13 @@ final class OverlayWindow: NSWindow {
 
     self.overlay = overlay
     super.init(
-      contentRect: triggerFrame,
+      contentRect: screen.frame,
       styleMask: .borderless,
       backing: .buffered,
       defer: false
     )
 
-    setFrame(triggerFrame, display: false)
+    setFrame(screen.frame, display: false)
     isOpaque = false
     backgroundColor = .clear
     hasShadow = false

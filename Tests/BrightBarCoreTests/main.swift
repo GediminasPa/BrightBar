@@ -65,18 +65,29 @@ check(!BoostMath.isEDRCapable(1.01), "EDR threshold is strict")
 check(BoostMath.isEDRCapable(1.02), "EDR display is detected above threshold")
 
 for headroom: CGFloat in [1.0, 1.4, 2.0, 4.0, 16.0] {
-  let gentle = BrightnessLevel.gentle.boost(potentialHeadroom: headroom)
-  let brighter = BrightnessLevel.brighter.boost(potentialHeadroom: headroom)
-  let maximum = BrightnessLevel.maximum.boost(potentialHeadroom: headroom)
-  check(gentle <= brighter && brighter <= maximum, "Levels stay ordered at \(headroom)x headroom")
+  let boosts = BrightnessLevel.allCases.map {
+    $0.boost(potentialHeadroom: headroom)
+  }
+  check(
+    zip(boosts, boosts.dropFirst()).allSatisfy { $0 <= $1 },
+    "Levels stay ordered at \(headroom)x headroom"
+  )
 }
 
+check(BrightnessLevel.allCases.count == 4, "Brightness control exposes four stops")
+check(BrightnessLevel.one.boost(potentialHeadroom: 16.0) == 1.0, "First stop requests 1x")
 check(
-  BrightnessLevel.maximum.boost(potentialHeadroom: 3.5) == 8.0,
-  "Maximum uses the calibrated transfer factor"
+  BrightnessLevel.onePointFive.boost(potentialHeadroom: 16.0) == 1.5,
+  "Second stop requests 1.5x"
+)
+check(BrightnessLevel.two.boost(potentialHeadroom: 16.0) == 2.0, "Third stop requests 2x")
+check(BrightnessLevel.four.boost(potentialHeadroom: 16.0) == 4.0, "Fourth stop requests 4x")
+check(
+  BrightnessLevel.restoring(4) == .four,
+  "Removed 8x setting migrates to 4x"
 )
 check(
-  BrightnessLevel.restoring(100) == .brighter,
+  BrightnessLevel.restoring(100) == .two,
   "Invalid stored level restores the middle setting"
 )
 
@@ -88,12 +99,9 @@ let signature = DisplaySignature.make(from: [
 ])
 check(signature == ["7:0,0,1728,1117"], "Display signature captures ID and frame")
 
-check(GammaMath.safeFactor(.nan) == 1.0, "Non-finite gamma factor restores identity")
-check(GammaMath.safeFactor(0.5) == 1.0, "Gamma factor cannot dim the display")
-check(GammaMath.safeFactor(10.0) == 8.0, "Gamma factor is capped at eight times")
 check(
-  GammaMath.scaled([Float(0.0), 0.5, 1.0], factor: 1.4) == [0.0, 0.7, 1.4],
-  "Gamma values scale into extended range"
+  abs(BoostMath.pacedBoost(8.0, liveHeadroom: 2.67) - 2.937) < accuracy,
+  "EDR engagement uses only a bounded relative lead"
 )
 
 if failureCount > 0 {

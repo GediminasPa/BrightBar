@@ -1,0 +1,20 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run tests
+        run: swift run BrightBarTests
+      - name: Build app bundle
+        run: ./scripts/build-app.sh
+      - name: Verify bundle
+        run: |
+          codesign --verify --deep --strict dist/BrightBar.app
+          plutil -lint Info.plist dist/BrightBar.app/Contents/Info.plist
