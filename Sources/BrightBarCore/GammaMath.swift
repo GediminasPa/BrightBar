@@ -3,7 +3,7 @@ import CoreGraphics
 public enum GammaMath {
   public static func safeFactor(_ factor: CGFloat) -> CGFloat {
     guard factor.isFinite else { return 1.0 }
-    return min(max(factor, 1.0), 1.6)
+    return min(max(factor, 1.0), 2.0)
   }
 
   public static func scaled<T: BinaryFloatingPoint>(

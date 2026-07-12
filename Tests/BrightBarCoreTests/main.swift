@@ -72,7 +72,7 @@ for headroom: CGFloat in [1.0, 1.4, 2.0, 4.0, 16.0] {
 }
 
 check(
-  BrightnessLevel.maximum.boost(potentialHeadroom: 3.5) == 1.6,
+  BrightnessLevel.maximum.boost(potentialHeadroom: 3.5) == 2.0,
   "Maximum uses the calibrated transfer factor"
 )
 check(
@@ -90,7 +90,7 @@ check(signature == ["7:0,0,1728,1117"], "Display signature captures ID and frame
 
 check(GammaMath.safeFactor(.nan) == 1.0, "Non-finite gamma factor restores identity")
 check(GammaMath.safeFactor(0.5) == 1.0, "Gamma factor cannot dim the display")
-check(GammaMath.safeFactor(2.0) == 1.6, "Gamma factor is capped at calibrated maximum")
+check(GammaMath.safeFactor(3.0) == 2.0, "Gamma factor is capped at two times")
 check(
   GammaMath.scaled([Float(0.0), 0.5, 1.0], factor: 1.4) == [0.0, 0.7, 1.4],
   "Gamma values scale into extended range"
