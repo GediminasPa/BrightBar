@@ -190,26 +190,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   }
 
   private func statusIcon(enabled: Bool) -> NSImage? {
-    guard
-      let url = Bundle.module.url(forResource: "StatusIcon", withExtension: "png"),
-      let source = NSImage(contentsOf: url),
-      let image = source.copy() as? NSImage
-    else {
-      return NSImage(
-        systemSymbolName: enabled ? "sun.max.fill" : "sun.max",
-        accessibilityDescription: enabled ? "BrightBar enabled" : "BrightBar disabled"
-      )
-    }
-
-    let sourceSize = image.size
-    let scale = 18 / max(sourceSize.width, sourceSize.height)
-    image.size = NSSize(
-      width: sourceSize.width * scale,
-      height: sourceSize.height * scale
+    NSImage(
+      systemSymbolName: enabled ? "sun.max.fill" : "sun.max",
+      accessibilityDescription: enabled ? "BrightBar enabled" : "BrightBar disabled"
     )
-    image.isTemplate = true
-    image.accessibilityDescription = enabled ? "BrightBar enabled" : "BrightBar disabled"
-    return image
   }
 
   private func registerObservers() {
